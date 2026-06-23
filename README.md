@@ -97,7 +97,9 @@ To run the frozen test evaluation once the test rhythm cache exists:
 python scripts/compute_rhythm_features.py --config configs/default.yaml --splits test --workers 16
 python scripts/evaluate_locked_test.py --config configs/structured.yaml \
   --checkpoint outputs/runs/structured_heads_seed20260621/best.pt \
-  --calibrator outputs/calibration/rhythm_calibrator.joblib
+  --calibrator outputs/calibration/rhythm_calibrator.joblib \
+  --blend-checkpoint outputs/runs/structured_finetune_lr1e4_seed20260621/best.pt \
+  --blend-weight 0.22
 ```
 
 For a fast end-to-end smoke test, pass `--max-records 256` to the normalization

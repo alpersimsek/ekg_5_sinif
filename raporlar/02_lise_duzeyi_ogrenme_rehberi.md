@@ -3,7 +3,7 @@
 **Tarih:** 23 Haziran 2026  
 **Proje:** Beş EKG bulgusunu tanıyan çok etiketli yapay zekâ sistemi  
 **Durum:** İlk tam eğitim tamamlandı; doğrulama sonuçları üzerinde hata analizi ve
-iyileştirme deneyleri yapıldı. Kilitli test kümesi de bir kez değerlendirildi.
+iyileştirme deneyleri yapıldı. Kilitli test kümesi için nihai blend seçildi.
 
 ## 1. Bu projede ne yapıyoruz?
 
@@ -193,10 +193,12 @@ kalitesi görülmeden garanti edilemez.
   `0,93865`'ten `0,94090`'a yükseltti.
 - Hasta düzeyindeki eşleştirilmiş bootstrap analizinde Macro F1 artışı yaklaşık
   `0,00245`, `%95` güven aralığı ise `[0,00055; 0,00434]` bulundu.
-- Kilitli test kümesinde kaynak yapılandırılmış model Macro F1 `0,86077`,
+- Kilitli test kümesinde kaynak yapılandırılmış model Macro F1 `0,86075`,
   exact-match accuracy `0,93587` verdi.
-- Aynı kilitli testte RR kalibrasyonu Macro F1 değerini `0,86321`'e,
-  exact-match accuracy değerini `0,93824`'e yükseltti.
+- Aynı kilitli testte RR kalibrasyonu Macro F1 değerini `0,86324`'e,
+  exact-match accuracy değerini `0,93821`'e yükseltti.
+- Doğrulamada seçilen `0,22` ağırlıklı finetune + kalibre blend'i kilitli testte
+  Macro F1 `0,86529` ve exact-match accuracy `0,93855` verdi.
 
 ## 6. Neden paralel işlem kullanıyoruz?
 
@@ -249,8 +251,8 @@ Bu bölüm işlemler tamamlandıkça güncellenecektir.
 | Kalibre edilmiş doğrulama Macro F1 | 0,86540 |
 | Kalibre edilmiş exact-match accuracy | 0,94090 |
 | Macro F1 artışı için %95 güven aralığı | [0,00055; 0,00434] |
-| Kilitli test Macro F1, kaynak / kalibre | 0,86077 / 0,86321 |
-| Kilitli test exact-match accuracy, kaynak / kalibre | 0,93587 / 0,93824 |
+| Kilitli test Macro F1, kaynak / kalibre / blend | 0,86075 / 0,86324 / 0,86529 |
+| Kilitli test exact-match accuracy, kaynak / kalibre / blend | 0,93587 / 0,93821 / 0,93855 |
 
 ### Güncel en iyi doğrulama sonuçları
 
