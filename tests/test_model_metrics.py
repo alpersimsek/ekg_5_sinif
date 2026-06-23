@@ -4,8 +4,14 @@ import numpy as np
 import torch
 
 from ekg_stage2.metrics import multilabel_metrics, patient_bootstrap_confidence_intervals
-from ekg_stage2.models import ECGResNet1D, StructuredECGResNet1D
+from ekg_stage2.models import (
+    ECGResNet1D,
+    RhythmFeatureStructuredECGResNet1D,
+    StructuredECGResNet1D,
+)
+from ekg_stage2.rhythm import RHYTHM_FEATURE_NAMES, RhythmFeatureStats
 from ekg_stage2.structured import (
+    FocalCrossEntropyLoss,
     StructuredCrossEntropyLoss,
     decode_structured_outputs,
     encode_structured_targets,
@@ -59,6 +65,43 @@ def test_structured_target_encoding() -> None:
     rhythm, conduction = encode_structured_targets(labels)
     torch.testing.assert_close(rhythm, torch.tensor([0, 1, 2, 3]))
     torch.testing.assert_close(conduction, torch.tensor([0, 1, 2, 0]))
+
+
+def test_focal_loss_with_zero_gamma_matches_cross_entropy() -> None:
+    logits = torch.tensor([[2.0, 0.5, -1.0], [0.1, 1.2, 0.3]])
+    targets = torch.tensor([0, 2])
+    weights = torch.tensor([0.5, 1.0, 2.0])
+    focal = FocalCrossEntropyLoss(weights, gamma=0.0)(logits, targets)
+    cross_entropy = torch.nn.functional.cross_entropy(logits, targets, weight=weights)
+    torch.testing.assert_close(focal, cross_entropy)
+
+
+def test_zero_initialized_rhythm_feature_branch_preserves_logits() -> None:
+    base = StructuredECGResNet1D(
+        stem_channels=16, stage_channels=(16, 32), blocks_per_stage=(1, 1), kernel_size=7
+    ).eval()
+    hybrid = RhythmFeatureStructuredECGResNet1D(
+        stem_channels=16, stage_channels=(16, 32), blocks_per_stage=(1, 1), kernel_size=7
+    ).eval()
+    result = hybrid.load_state_dict(base.state_dict(), strict=False)
+    assert result.unexpected_keys == []
+    assert all(key.startswith("rhythm_feature_head.") for key in result.missing_keys)
+    signal = torch.randn(2, 12, 1000)
+    rhythm_features = torch.randn(2, len(RHYTHM_FEATURE_NAMES) + 1)
+    with torch.inference_mode():
+        base_output = base(signal)
+        hybrid_output = hybrid(signal, rhythm_features)
+    torch.testing.assert_close(hybrid_output["rhythm"], base_output["rhythm"])
+    torch.testing.assert_close(hybrid_output["conduction"], base_output["conduction"])
+
+
+def test_rhythm_feature_statistics_mask_invalid_rows() -> None:
+    count = len(RHYTHM_FEATURE_NAMES)
+    stats = RhythmFeatureStats(np.ones(count), np.full(count, 2.0))
+    values = np.vstack((np.full(count, 3.0), np.full(count, 9.0)))
+    transformed = stats.transform(values, np.array([True, False]))
+    np.testing.assert_allclose(transformed[0], np.r_[np.ones(count), 1.0])
+    np.testing.assert_allclose(transformed[1], np.zeros(count + 1))
 
 
 def test_threshold_optimization_and_metrics_on_perfect_predictions() -> None:

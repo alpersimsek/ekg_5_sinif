@@ -74,16 +74,30 @@ def train_epoch(
     scaler: torch.amp.GradScaler,
     gradient_clip_norm: float,
     amp: bool,
+    feature_branch_only: bool = False,
 ) -> float:
     model.train()
+    if feature_branch_only:
+        model.eval()
+        feature_head = getattr(model, "rhythm_feature_head", None)
+        if feature_head is None:
+            raise ValueError("Feature-branch-only training requires a rhythm feature head")
+        feature_head.train()
     total_loss = 0.0
     total_records = 0
     for batch in loader:
         signals = batch["signal"].to(device, non_blocking=True)
         targets = batch["labels"].to(device, non_blocking=True)
+        rhythm_features = batch.get("rhythm_features")
+        if rhythm_features is not None:
+            rhythm_features = rhythm_features.to(device, non_blocking=True)
         optimizer.zero_grad(set_to_none=True)
         with torch.autocast(device_type=device.type, enabled=amp and device.type == "cuda"):
-            outputs = model(signals)
+            outputs = (
+                model(signals, rhythm_features=rhythm_features)
+                if rhythm_features is not None
+                else model(signals)
+            )
             loss = criterion(outputs, targets)
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
@@ -117,8 +131,15 @@ def evaluate_epoch(
     for batch in loader:
         signals = batch["signal"].to(device, non_blocking=True)
         targets = batch["labels"].to(device, non_blocking=True)
+        rhythm_features = batch.get("rhythm_features")
+        if rhythm_features is not None:
+            rhythm_features = rhythm_features.to(device, non_blocking=True)
         with torch.autocast(device_type=device.type, enabled=amp and device.type == "cuda"):
-            outputs = model(signals)
+            outputs = (
+                model(signals, rhythm_features=rhythm_features)
+                if rhythm_features is not None
+                else model(signals)
+            )
             loss = criterion(outputs, targets)
         total_loss += float(loss) * len(signals)
         total_records += len(signals)
@@ -158,6 +179,7 @@ def fit(
     resume_path: str | Path | None = None,
     scheduler_name: str = "cosine",
     scheduler_options: dict[str, float | int] | None = None,
+    feature_branch_only: bool = False,
 ) -> list[dict[str, object]]:
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
@@ -191,6 +213,7 @@ def fit(
             scaler,
             gradient_clip_norm,
             amp,
+            feature_branch_only,
         )
         validation = evaluate_epoch(model, validation_loader, criterion, device, amp)
         thresholds = (

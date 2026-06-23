@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from ekg_stage2.data.preprocessing import (
     AugmentationConfig,
@@ -9,6 +10,7 @@ from ekg_stage2.data.preprocessing import (
     bandpass_filter,
 )
 from ekg_stage2.data.wfdb_io import assess_signal_quality
+from ekg_stage2.rhythm import extract_rhythm_features
 
 
 def test_streaming_statistics_match_numpy() -> None:
@@ -63,3 +65,16 @@ def test_quality_detects_flat_lead_and_non_finite() -> None:
     assert not quality.valid
     assert "flat_lead" in quality.reasons
     assert "non_finite" in quality.reasons
+
+
+def test_rhythm_features_from_regular_peaks(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("ekg_stage2.rhythm.nk.ecg_clean", lambda signal, **kwargs: signal)
+    monkeypatch.setattr(
+        "ekg_stage2.rhythm.nk.ecg_peaks",
+        lambda signal, **kwargs: ({}, {"ECG_R_Peaks": np.arange(0, 5000, 500)}),
+    )
+    features, valid = extract_rhythm_features(np.zeros(5000, dtype=np.float32))
+    assert valid
+    assert features[0] == 60.0
+    assert features[1] == 1.0
+    assert features[3] == 0.0

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from ekg_stage2.constants import LABELS
 
@@ -55,17 +56,42 @@ def structured_class_weights(
     return weights[0], weights[1]
 
 
+class FocalCrossEntropyLoss(nn.Module):
+    """Weighted categorical focal loss with cross-entropy-compatible normalization."""
+
+    def __init__(self, weights: torch.Tensor, gamma: float = 2.0) -> None:
+        super().__init__()
+        if gamma < 0.0:
+            raise ValueError("Focal gamma cannot be negative")
+        self.register_buffer("weights", weights)
+        self.gamma = gamma
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        cross_entropy = F.cross_entropy(logits, targets, weight=self.weights, reduction="none")
+        target_probability = logits.softmax(dim=1).gather(1, targets[:, None]).squeeze(1)
+        modulated = (1.0 - target_probability).pow(self.gamma) * cross_entropy
+        normalization = self.weights[targets].sum().clamp_min(torch.finfo(logits.dtype).eps)
+        return modulated.sum() / normalization
+
+
 class StructuredCrossEntropyLoss(nn.Module):
     def __init__(
         self,
         rhythm_weights: torch.Tensor,
         conduction_weights: torch.Tensor,
         rhythm_fraction: float = 0.6,
+        rhythm_loss: str = "cross_entropy",
+        focal_gamma: float = 2.0,
     ) -> None:
         super().__init__()
         if not 0.0 <= rhythm_fraction <= 1.0:
             raise ValueError("Rhythm loss fraction must be between zero and one")
-        self.rhythm_loss = nn.CrossEntropyLoss(weight=rhythm_weights)
+        if rhythm_loss == "cross_entropy":
+            self.rhythm_loss: nn.Module = nn.CrossEntropyLoss(weight=rhythm_weights)
+        elif rhythm_loss == "focal":
+            self.rhythm_loss = FocalCrossEntropyLoss(rhythm_weights, gamma=focal_gamma)
+        else:
+            raise ValueError(f"Unknown rhythm loss: {rhythm_loss}")
         self.conduction_loss = nn.CrossEntropyLoss(weight=conduction_weights)
         self.rhythm_fraction = rhythm_fraction
 

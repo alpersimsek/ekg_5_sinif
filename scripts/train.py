@@ -14,8 +14,13 @@ from torch.utils.data import DataLoader
 from ekg_stage2.config import as_plain_dict, ensure_output_directories, load_config
 from ekg_stage2.data.dataset import ECGDataset, positive_class_weights
 from ekg_stage2.data.preprocessing import AugmentationConfig, NormalizationStats
-from ekg_stage2.models import ECGResNet1D, StructuredECGResNet1D
+from ekg_stage2.models import (
+    ECGResNet1D,
+    RhythmFeatureStructuredECGResNet1D,
+    StructuredECGResNet1D,
+)
 from ekg_stage2.reproducibility import environment_snapshot, seed_everything
+from ekg_stage2.rhythm import RhythmFeatureStats
 from ekg_stage2.structured import StructuredCrossEntropyLoss, structured_class_weights
 from ekg_stage2.training import fit
 
@@ -55,6 +60,14 @@ def main() -> None:
         augmentation = AugmentationConfig(
             **{key: value for key, value in dict(cfg.augmentation).items() if key != "enabled"}
         )
+    use_rhythm_features = bool(cfg.model.get("rhythm_features", False))
+    rhythm_stats = None
+    train_rhythm_features = None
+    validation_rhythm_features = None
+    if use_rhythm_features:
+        rhythm_stats = RhythmFeatureStats.load(Path(cfg.paths.stats) / "rhythm_feature_stats.npz")
+        train_rhythm_features = Path(cfg.paths.stats) / "rhythm_features_train.csv"
+        validation_rhythm_features = Path(cfg.paths.stats) / "rhythm_features_validation.csv"
     train_dataset = ECGDataset(
         train_manifest,
         cfg.paths.data_root,
@@ -63,9 +76,16 @@ def main() -> None:
         augmentation=augmentation,
         seed=int(cfg.seed),
         preprocessing=preprocessing,
+        rhythm_features=train_rhythm_features,
+        rhythm_stats=rhythm_stats,
     )
     validation_dataset = ECGDataset(
-        validation_manifest, cfg.paths.data_root, stats, preprocessing=preprocessing
+        validation_manifest,
+        cfg.paths.data_root,
+        stats,
+        preprocessing=preprocessing,
+        rhythm_features=validation_rhythm_features,
+        rhythm_stats=rhythm_stats,
     )
     loader_options = {
         "batch_size": int(cfg.training.batch_size),
@@ -85,12 +105,19 @@ def main() -> None:
     }
     head = str(cfg.model.get("head", "independent"))
     if head == "structured":
-        model = StructuredECGResNet1D(**model_options).to(device)
+        model = (
+            RhythmFeatureStructuredECGResNet1D(**model_options)
+            if use_rhythm_features
+            else StructuredECGResNet1D(**model_options)
+        ).to(device)
         rhythm_weights, conduction_weights = structured_class_weights(
             train_manifest, power=float(cfg.model.get("class_weight_power", 0.5))
         )
         criterion = StructuredCrossEntropyLoss(
-            rhythm_weights.to(device), conduction_weights.to(device)
+            rhythm_weights.to(device),
+            conduction_weights.to(device),
+            rhythm_loss=str(cfg.model.get("rhythm_loss", "cross_entropy")),
+            focal_gamma=float(cfg.model.get("focal_gamma", 2.0)),
         )
     elif head == "independent":
         model = ECGResNet1D(**model_options).to(device)
@@ -105,9 +132,28 @@ def main() -> None:
         if not init_checkpoint.is_file():
             raise FileNotFoundError(init_checkpoint)
         checkpoint = torch.load(init_checkpoint, map_location=device, weights_only=False)
-        model.load_state_dict(checkpoint["model_state_dict"])
+        load_result = model.load_state_dict(
+            checkpoint["model_state_dict"], strict=not bool(cfg.model.get("partial_init", False))
+        )
+        allowed_missing_prefix = "rhythm_feature_head."
+        if load_result.unexpected_keys or any(
+            not key.startswith(allowed_missing_prefix) for key in load_result.missing_keys
+        ):
+            raise ValueError(
+                f"Unexpected checkpoint mismatch: missing={load_result.missing_keys}, "
+                f"unexpected={load_result.unexpected_keys}"
+            )
+    feature_branch_only = bool(cfg.training.get("feature_branch_only", False))
+    if feature_branch_only:
+        for parameter in model.parameters():
+            parameter.requires_grad = False
+        feature_head = getattr(model, "rhythm_feature_head", None)
+        if feature_head is None:
+            raise ValueError("Feature-branch-only training requires rhythm features")
+        for parameter in feature_head.parameters():
+            parameter.requires_grad = True
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        (parameter for parameter in model.parameters() if parameter.requires_grad),
         lr=float(cfg.training.learning_rate),
         weight_decay=float(cfg.training.weight_decay),
     )
@@ -154,6 +200,7 @@ def main() -> None:
             "patience": int(cfg.training.get("plateau_patience", 2)),
             "min_lr": float(cfg.training.get("minimum_learning_rate", 1e-6)),
         },
+        feature_branch_only=feature_branch_only,
     )
 
 

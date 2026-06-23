@@ -1,6 +1,6 @@
 # EKG Yapay Zekâ Projesi — Lise Düzeyi Öğrenme Rehberi
 
-**Tarih:** 22 Haziran 2026  
+**Tarih:** 23 Haziran 2026  
 **Proje:** Beş EKG bulgusunu tanıyan çok etiketli yapay zekâ sistemi  
 **Durum:** İlk tam eğitim tamamlandı; doğrulama sonuçları üzerinde hata analizi ve
 iyileştirme deneyleri planlanıyor. Kilitli test kümesi henüz kullanılmadı.
@@ -158,7 +158,7 @@ kalitesi görülmeden garanti edilemez.
 - 573.355 kayıt hasta kimliğine göre eğitim, doğrulama ve test kümelerine ayrıldı.
 - İlk ayrımda hasta sızıntısı olmadığı otomatik olarak doğrulandı.
 - Sinyal okuma, filtreleme, veri kümesi, model, metrik ve eşik kodları yazıldı.
-- 14 otomatik test geçti; kod kalite denetimi hata vermedi.
+- 17 otomatik test geçti; kod kalite denetimi hata vermedi.
 - İlk kalite taraması bozuk sinyallerin manifestlerden çıkarılması gerektiğini gösterdi.
 - Tam veri kalite taraması sekiz paralel işlemle 26 dakika 10 saniyede tamamlandı.
 - 7.805 geçersiz kayıt çıkarıldı ve manifestler 565.550 geçerli kayıtla yenilendi.
@@ -175,8 +175,24 @@ kalitesi görülmeden garanti edilemez.
 - İki başlıklı tam eğitim 19. epoch'ta erken durdurmayla tamamlandı. En iyi
   doğrulama sonucu 11. epoch'ta elde edildi: Macro F1 `0,86308`, exact-match
   accuracy `0,93865` ve AFL F1 `0,66225`.
-- En iyi iki başlıklı model `0,0001` öğrenme hızıyla yeniden başlatıldı. Doğrulama
-  sonucu durduğunda öğrenme hızını azaltan ikinci iyileştirme deneyi devam ediyor.
+- Düşük öğrenme hızlı ince ayar 9. epoch'ta tamamlandı. AFL F1 `0,66747`'ye
+  yükseldi; ancak Macro F1 `0,86156` olduğu için genel olarak en iyi iki başlıklı
+  modeli geçemedi.
+- Yalnızca ritim başlığında focal loss kullanan deney 10 epoch sonunda Macro F1
+  `0,85802` ve AFL F1 `0,65073` üretti; kaynak modeli geçemedi.
+- Doğrulamadaki 710 AFL yanlış pozitif ve 667 AFL yanlış negatif örnek incelendi.
+  En güçlü yanlış pozitiflerin bir bölümünde flutter benzeri düzenli dalgalar
+  görülmesi etiket belirsizliğine işaret etti.
+- NeuroKit2 ile 396.128 eğitim ve 84.063 doğrulama kaydının R tepeleri çıkarıldı.
+  Kayıtların sırasıyla `%99,35` ve `%99,51`'inde geçerli kısa süreli ritim
+  özellikleri üretildi.
+- Donmuş EKG kodlayıcısına eklenen sinir ağı ritim dalı iki tam epoch sonunda
+  `0,86011` Macro F1'da kaldığı için gereksiz hesaplamayı önlemek amacıyla durduruldu.
+- Hasta grupları karıştırılmadan yapılan beş katlı out-of-fold kalibrasyon Macro F1
+  değerini `0,86308`'den `0,86540`'a, exact-match accuracy değerini ise
+  `0,93865`'ten `0,94090`'a yükseltti.
+- Hasta düzeyindeki eşleştirilmiş bootstrap analizinde Macro F1 artışı yaklaşık
+  `0,00245`, `%95` güven aralığı ise `[0,00055; 0,00434]` bulundu.
 
 ## 6. Neden paralel işlem kullanıyoruz?
 
@@ -188,15 +204,11 @@ dosyaların daha yavaş okunması nedeniyle hız sabit değildir.
 
 ## 7. Sonraki adımlar
 
-1. İlk modelin yanlış pozitif ve yanlış negatif örneklerini sınıf bazında incelemek
-2. Etiket yapısını kullanan iki çıkışlı modeli eğitmek
-3. AFL için kayıp hesabı ve örnek seçme yöntemlerini karşılaştırmak
-4. Öğrenme hızı ve düzenlileştirme deneyleri yapmak
-5. Ritim ve EKG şekil bilgisini daha iyi kullanan model değişikliklerini denemek
-6. En iyi ayarları en az üç farklı rastgele başlangıçla doğrulamak
-7. En güçlü modelleri birleştiren bir ensemble denemek
-8. Bütün kararlar bittikten sonra kilitli test kümesini yalnızca bir kez değerlendirmek
-9. Hasta düzeyinde güven aralıkları, grafikler ve hata analizi üretmek
+1. Kalibrasyon kazancını farklı rastgele başlangıçlarla doğrulamak
+2. En güçlü modelleri birleştiren bir ensemble denemek
+3. AFIB/AFL etiket belirsizliğini kardiyoloji uzmanıyla örneklem düzeyinde incelemek
+4. Bütün kararlar bittikten sonra kilitli test kümesini yalnızca bir kez değerlendirmek
+5. Test sonucunun hasta düzeyinde güven aralıklarını ve alt grup analizlerini üretmek
 
 ## 8. Sonuçlar bölümü
 
@@ -212,7 +224,7 @@ Bu bölüm işlemler tamamlandıkça güncellenecektir.
 | Örnek kalite denetimi | 1.000 kayıt |
 | Örnekte geçerli kayıt | 982 |
 | Örnekte geçersiz kayıt | 18 |
-| Otomatik test | 14/14 başarılı |
+| Otomatik test | 17/17 başarılı |
 | Kod kalite kontrolü | Başarılı |
 | GPU | NVIDIA GeForce RTX 3090 |
 | Tam kalite denetimi | 573.355/573.355 tamamlandı |
@@ -228,8 +240,23 @@ Bu bölüm işlemler tamamlandıkça güncellenecektir.
 | Doğrulama exact-match accuracy | 0,93387 |
 | İki başlıklı model doğrulama Macro F1 | 0,86308 |
 | İki başlıklı model exact-match accuracy | 0,93865 |
-| Düşük öğrenme hızlı ince ayar | Tam veriyle eğitim devam ediyor |
+| Düşük öğrenme hızlı ince ayar Macro F1 | 0,86156; kaynak modeli geçemedi |
+| Ritim focal-loss deneyi Macro F1 | 0,85802; kaynak modeli geçemedi |
+| Ritim özelliği geçerlilik oranı | Eğitim %99,35 / doğrulama %99,51 |
+| Kalibre edilmiş doğrulama Macro F1 | 0,86540 |
+| Kalibre edilmiş exact-match accuracy | 0,94090 |
+| Macro F1 artışı için %95 güven aralığı | [0,00055; 0,00434] |
 | Kilitli test sonucu | Henüz yok |
+
+### Güncel en iyi doğrulama sonuçları
+
+| Sınıf | Yapılandırılmış model F1 | RR kalibrasyonu sonrası F1 |
+|---|---:|---:|
+| NORMAL | 0,98251 | 0,98400 |
+| AFIB | 0,90087 | 0,90481 |
+| AFL | 0,66225 | 0,66846 |
+| LBBB | 0,89545 | 0,89545 |
+| RBBB | 0,87430 | 0,87430 |
 
 ### İlk tam modelin sınıf bazındaki doğrulama sonuçları
 
@@ -291,11 +318,12 @@ denenecektir. Dropout ve weight decay de küçük, kontrollü aralıklarla taran
 ### 9.4. Ritim ve şekil bilgisini birlikte kullanmak
 
 AFIB ve AFL ayrımında yalnızca tek bir kalp atımının şekli değil, atımların zaman
-aralıkları da önemlidir. İleri deneylerde R tepeleri eğitim verisinden otomatik
-bulunarak atımlar arası süreler yardımcı özellik olarak verilebilir. Ayrıca kısa
-ve uzun EKG örüntülerini aynı anda gören çok ölçekli evrişimler denenebilir.
-R-tepesi bulma hataları yeni bir hata kaynağı olabileceği için bu adım, iki başlıklı
-modelden sonra uygulanacaktır.
+aralıkları da önemlidir. R tepeleri eğitim verisinden otomatik bulunarak atımlar
+arası süreler çıkarıldı. AFIB kayıtlarında RR değişkenliği AFL kayıtlarından
+belirgin biçimde daha yüksekti. Bu özellikleri mevcut olasılıklarla birleştiren
+hasta gruplu kalibrasyon küçük ama ölçülebilir bir kazanç sağladı. On saniyelik
+kayıtlar frekans alanı HRV ölçümleri için kısa olduğundan yalnızca zaman alanı
+özellikleri kullanıldı.
 
 ### 9.5. Eşik, tekrar ve ensemble
 

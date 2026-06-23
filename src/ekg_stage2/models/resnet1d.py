@@ -143,3 +143,29 @@ class StructuredECGResNet1D(ECGResNet1D):
             "rhythm": self.rhythm_head(pooled),
             "conduction": self.conduction_head(pooled),
         }
+
+
+class RhythmFeatureStructuredECGResNet1D(StructuredECGResNet1D):
+    """Structured model with an additive short-record rhythm feature branch."""
+
+    def __init__(self, rhythm_feature_count: int = 10, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self.rhythm_feature_head = nn.Sequential(
+            nn.Linear(rhythm_feature_count, 32),
+            nn.SiLU(),
+            nn.Linear(32, 4),
+        )
+        final = self.rhythm_feature_head[-1]
+        if not isinstance(final, nn.Linear):
+            raise TypeError("Unexpected rhythm feature head")
+        nn.init.zeros_(final.weight)
+        nn.init.zeros_(final.bias)
+
+    def forward(
+        self, x: torch.Tensor, rhythm_features: torch.Tensor | None = None
+    ) -> dict[str, torch.Tensor]:
+        outputs = super().forward(x)
+        if rhythm_features is None:
+            raise ValueError("Rhythm features are required by this model")
+        outputs["rhythm"] = outputs["rhythm"] + self.rhythm_feature_head(rhythm_features)
+        return outputs

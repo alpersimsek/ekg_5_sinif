@@ -16,6 +16,7 @@ from ekg_stage2.data.preprocessing import (
     preprocess_signal,
 )
 from ekg_stage2.data.wfdb_io import load_record
+from ekg_stage2.rhythm import RHYTHM_FEATURE_NAMES, RhythmFeatureStats
 
 
 class ECGDataset(Dataset[dict[str, Any]]):
@@ -29,11 +30,31 @@ class ECGDataset(Dataset[dict[str, Any]]):
         seed: int = 20260621,
         max_records: int | None = None,
         preprocessing: dict[str, float | int] | None = None,
+        rhythm_features: pd.DataFrame | str | Path | None = None,
+        rhythm_stats: RhythmFeatureStats | None = None,
     ) -> None:
         frame = pd.read_csv(manifest) if isinstance(manifest, (str, Path)) else manifest.copy()
         if max_records is not None:
             frame = frame.iloc[:max_records].copy()
         self.frame = frame.reset_index(drop=True)
+        self.rhythm_features: np.ndarray | None = None
+        if rhythm_features is not None:
+            if rhythm_stats is None:
+                raise ValueError("Rhythm feature statistics are required")
+            feature_frame = (
+                pd.read_csv(rhythm_features)
+                if isinstance(rhythm_features, (str, Path))
+                else rhythm_features.copy()
+            )
+            columns = ["study_id", *RHYTHM_FEATURE_NAMES, "valid"]
+            merged = self.frame[["study_id"]].merge(
+                feature_frame[columns], on="study_id", how="left", validate="one_to_one"
+            )
+            if merged["valid"].isna().any():
+                raise ValueError("Rhythm features are missing for one or more manifest records")
+            values = merged[list(RHYTHM_FEATURE_NAMES)].to_numpy(dtype=np.float32)
+            valid = merged["valid"].astype(bool).to_numpy()
+            self.rhythm_features = rhythm_stats.transform(values, valid)
         self.data_root = Path(data_root)
         self.stats = stats
         self.training = training
@@ -60,12 +81,15 @@ class ECGDataset(Dataset[dict[str, Any]]):
             )
             signal = augment_signal(signal, rng, self.augmentation)
         labels = row[list(LABELS)].to_numpy(dtype=np.float32)
-        return {
+        result = {
             "signal": torch.from_numpy(signal),
             "labels": torch.from_numpy(labels),
             "study_id": int(row["study_id"]),
             "subject_id": int(row["subject_id"]),
         }
+        if self.rhythm_features is not None:
+            result["rhythm_features"] = torch.from_numpy(self.rhythm_features[index])
+        return result
 
 
 def positive_class_weights(manifest: pd.DataFrame) -> torch.Tensor:
@@ -74,4 +98,3 @@ def positive_class_weights(manifest: pd.DataFrame) -> torch.Tensor:
     if (positives == 0).any():
         raise ValueError("Cannot compute positive class weight for a label with no positives")
     return torch.tensor(negatives / positives, dtype=torch.float32)
-

@@ -72,6 +72,25 @@ python scripts/train.py --config configs/structured_finetune.yaml \
   --init-checkpoint outputs/runs/structured_heads_seed20260621/best.pt
 ```
 
+The AFL-focused refinement applies focal loss only to the rhythm head:
+
+```bash
+python scripts/train.py --config configs/structured_focal_finetune.yaml \
+  --init-checkpoint outputs/runs/structured_heads_seed20260621/best.pt
+```
+
+Short-record RR features are computed from lead II with NeuroKit2. The cache is
+restart-safe and its normalization statistics use training records only:
+
+```bash
+python scripts/compute_rhythm_features.py --config configs/default.yaml --workers 16
+python scripts/audit_rhythm_errors.py --config configs/default.yaml
+python scripts/fit_rhythm_calibrator.py --config configs/default.yaml
+```
+
+The calibrator uses patient-grouped out-of-fold validation predictions and does
+not access the locked test manifest.
+
 For a fast end-to-end smoke test, pass `--max-records 256` to the normalization
 and training scripts.
 
@@ -83,5 +102,6 @@ All generated artifacts remain beneath `codex_run/outputs/`:
 - `audit/`: waveform inspection results;
 - `stats/`: train-only normalization statistics;
 - `runs/`: checkpoints, validation predictions, thresholds, and history.
+- `calibration/`: patient-grouped calibration models, reports, and OOF predictions.
 
 The raw dataset is treated as read-only.
