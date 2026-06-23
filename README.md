@@ -91,6 +91,15 @@ python scripts/fit_rhythm_calibrator.py --config configs/default.yaml
 The calibrator uses patient-grouped out-of-fold validation predictions and does
 not access the locked test manifest.
 
+To run the frozen test evaluation once the test rhythm cache exists:
+
+```bash
+python scripts/compute_rhythm_features.py --config configs/default.yaml --splits test --workers 16
+python scripts/evaluate_locked_test.py --config configs/structured.yaml \
+  --checkpoint outputs/runs/structured_heads_seed20260621/best.pt \
+  --calibrator outputs/calibration/rhythm_calibrator.joblib
+```
+
 For a fast end-to-end smoke test, pass `--max-records 256` to the normalization
 and training scripts.
 

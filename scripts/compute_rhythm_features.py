@@ -64,7 +64,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/default.yaml")
     parser.add_argument("--workers", type=int, default=8)
-    parser.add_argument("--splits", nargs="+", choices=("train", "validation"), default=None)
+    parser.add_argument(
+        "--splits", nargs="+", choices=("train", "validation", "test"), default=None
+    )
     args = parser.parse_args()
     cfg = load_config(args.config)
     ensure_output_directories(cfg)
@@ -87,6 +89,11 @@ def main() -> None:
             "train_records": len(train),
             "train_valid": int(valid.sum()),
             "validation_records": len(pd.read_csv(validation_path, usecols=["study_id"])),
+            "test_records": int(
+                len(pd.read_csv(Path(cfg.paths.manifests) / "test.csv", usecols=["study_id"]))
+            )
+            if (Path(cfg.paths.manifests) / "test.csv").exists()
+            else None,
             "mean": stats.mean.tolist(),
             "std": stats.std.tolist(),
         }
