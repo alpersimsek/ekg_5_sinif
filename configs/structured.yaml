@@ -1,0 +1,59 @@
+seed: 20260621
+
+paths:
+  data_root: /mnt/d/EKG_WORK/5_Class_Data
+  metadata: /mnt/d/EKG_WORK/5_Class_Data/metadata.csv
+  output_root: ${oc.env:CODEX_RUN_DIR,/home/alper/Ekg_Stage_2/codex_run}/outputs
+  manifests: ${paths.output_root}/manifests
+  audit: ${paths.output_root}/audit
+  stats: ${paths.output_root}/stats
+  runs: ${paths.output_root}/runs
+
+data:
+  labels: [NORMAL, AFIB, AFL, LBBB, RBBB]
+  leads: [I, II, III, aVR, aVL, aVF, V1, V2, V3, V4, V5, V6]
+  sampling_rate: 500
+  samples: 5000
+  train_fraction: 0.70
+  validation_fraction: 0.15
+  test_fraction: 0.15
+  bandpass_low_hz: 0.5
+  bandpass_high_hz: 100.0
+  filter_order: 3
+  clip_millivolts: 10.0
+
+quality:
+  flatline_std_mv: 0.001
+  extreme_amplitude_mv: 20.0
+  max_nan_fraction: 0.0
+
+model:
+  head: structured
+  class_weight_power: 0.5
+  stem_channels: 64
+  stage_channels: [64, 128, 256, 384]
+  blocks_per_stage: [2, 2, 2, 2]
+  kernel_size: 15
+  dropout: 0.20
+
+training:
+  batch_size: 64
+  epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  num_workers: 8
+  patience: 8
+  gradient_clip_norm: 1.0
+  amp: true
+  threshold_grid_size: 181
+  threshold_min: 0.05
+  threshold_max: 0.95
+
+augmentation:
+  enabled: true
+  amplitude_scale: 0.10
+  gaussian_noise_std: 0.005
+  baseline_wander_std: 0.02
+  time_mask_fraction: 0.02
+  max_shift_fraction: 0.02
+  lead_dropout_probability: 0.05
